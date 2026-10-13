@@ -32,7 +32,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android
+          targets: aarch64-linux-android,armv7-linux-androideabi
 
       - uses: actions/setup-java@v4
         with:
@@ -109,6 +109,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: EffectCraft-android-arm64
+          name: EffectCraft-android
           path: ${{ env.APK }}
           if-no-files-found: error
