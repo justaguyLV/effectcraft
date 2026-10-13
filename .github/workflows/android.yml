@@ -21,7 +21,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  CARGO_TERM_COLOR: always
+  CARGO_TERM_COLOR: never
 
 jobs:
   apk:
@@ -92,13 +92,9 @@ jobs:
           cargo apk build --release --lib -p effectcraft-android > "$RUNNER_TEMP/build.log" 2>&1
           rc=$?
           if [ $rc -ne 0 ]; then
-            # The first compiler errors (with context), else the tail of the log.
-            if grep -q "^error" "$RUNNER_TEMP/build.log"; then
-              sel=$(grep -n -A14 "^error" "$RUNNER_TEMP/build.log" | head -n 120)
-            else
-              sel=$(tail -n 80 "$RUNNER_TEMP/build.log")
-            fi
-            msg=$(printf '%s' "$sel" | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            # Drop the progress lines; keep the end of what is left (the annotation size is capped).
+            sel=$(grep -v -E "^ *(Compiling|Downloaded|Downloading|Fresh|Blocking|Updating|Locking|Adding) " "$RUNNER_TEMP/build.log" | tail -n 40 | cut -c1-300)
+            msg=$(printf '%s' "$sel" | head -c 3500 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
             echo "::error title=cargo apk build failed::$msg"
             exit $rc
           fi
