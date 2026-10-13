@@ -1,0 +1,96 @@
+name: Android
+
+# Builds and signs an arm64 APK of EffectCraft (apps/effectcraft-android).
+#
+# Signing: put a PKCS12 keystore (one key, same store and key password) in the repository secrets
+#   ANDROID_KEYSTORE_BASE64   base64 of the .jks / .p12 file
+#   KEYSTORE_PASSWORD         its password
+# Without them the job signs with a throwaway key so the APK still installs, but updates over a
+# previous install will fail because the key differs each run.
+
+on:
+  push:
+    branches: [android-port]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+          cache-bin: "true"
+
+      - name: Android SDK and NDK
+        run: |
+          set -eux
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0"
+          echo "ANDROID_NDK_ROOT=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+          echo "NDK: $ANDROID_NDK_LATEST_HOME"
+
+      - name: Install cargo-apk
+        run: cargo install cargo-apk --locked
+
+      - name: Keystore
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          set -eu
+          KS="$RUNNER_TEMP/release.keystore"
+          if [ -n "$KS_B64" ] && [ -n "$KS_PASS" ]; then
+            echo "$KS_B64" | base64 -d > "$KS"
+            echo "SIGNING=release key from secrets" >> "$GITHUB_ENV"
+          else
+            KS_PASS="effectcraft-ci"
+            keytool -genkeypair -keystore "$KS" -storetype PKCS12 -storepass "$KS_PASS" -keypass "$KS_PASS" \
+              -alias ci -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=EffectCraft CI,O=CI,C=US"
+            echo "SIGNING=throwaway CI key (add the secrets for a stable key)" >> "$GITHUB_ENV"
+          fi
+          echo "::add-mask::$KS_PASS"
+          echo "CARGO_APK_RELEASE_KEYSTORE=$KS" >> "$GITHUB_ENV"
+          echo "CARGO_APK_RELEASE_KEYSTORE_PASSWORD=$KS_PASS" >> "$GITHUB_ENV"
+
+      - name: Build APK
+        run: cargo apk build --release --lib -p effectcraft-android
+
+      - name: Verify signature
+        run: |
+          set -eux
+          APK=$(find target -name '*.apk' -path '*release*' | head -n1)
+          echo "APK=$APK" >> "$GITHUB_ENV"
+          ls -l "$APK"
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose --print-certs "$APK"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EffectCraft-android-arm64
+          path: ${{ env.APK }}
+          if-no-files-found: error
