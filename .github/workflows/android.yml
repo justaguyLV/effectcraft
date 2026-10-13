@@ -94,7 +94,7 @@ jobs:
           if [ $rc -ne 0 ]; then
             # Drop the progress lines; keep the end of what is left (the annotation size is capped).
             sel=$(grep -v -E "^ *(Compiling|Downloaded|Downloading|Fresh|Blocking|Updating|Locking|Adding) " "$RUNNER_TEMP/build.log" | tail -n 40 | cut -c1-300)
-            msg=$(printf '%s' "$sel" | head -c 3500 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            msg=$(printf '%s' "$sel" | tail -c 3500 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
             echo "::error title=cargo apk build failed::$msg"
             exit $rc
           fi
