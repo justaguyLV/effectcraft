@@ -56,7 +56,15 @@ jobs:
           echo "NDK: $ANDROID_NDK_LATEST_HOME"
 
       - name: Install cargo-apk
-        run: cargo install cargo-apk --locked
+        run: |
+          set +e
+          cargo install cargo-apk --locked > "$RUNNER_TEMP/install.log" 2>&1
+          rc=$?
+          if [ $rc -ne 0 ]; then
+            msg=$(tail -n 60 "$RUNNER_TEMP/install.log" | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=cargo-apk install failed::$msg"
+            exit $rc
+          fi
 
       - name: Keystore
         env:
@@ -79,7 +87,21 @@ jobs:
           echo "CARGO_APK_RELEASE_KEYSTORE_PASSWORD=$KS_PASS" >> "$GITHUB_ENV"
 
       - name: Build APK
-        run: cargo apk build --release --lib -p effectcraft-android
+        run: |
+          set +e
+          cargo apk build --release --lib -p effectcraft-android > "$RUNNER_TEMP/build.log" 2>&1
+          rc=$?
+          if [ $rc -ne 0 ]; then
+            # The first compiler errors (with context), else the tail of the log.
+            if grep -q "^error" "$RUNNER_TEMP/build.log"; then
+              sel=$(grep -n -A14 "^error" "$RUNNER_TEMP/build.log" | head -n 120)
+            else
+              sel=$(tail -n 80 "$RUNNER_TEMP/build.log")
+            fi
+            msg=$(printf '%s' "$sel" | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=cargo apk build failed::$msg"
+            exit $rc
+          fi
 
       - name: Verify signature
         run: |
