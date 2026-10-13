@@ -22,7 +22,7 @@ effectcraft-render = { workspace = true }
 effectcraft-engine = { workspace = true }
 effectcraft-gpu = { workspace = true }
 egui = { workspace = true }
-eframe = { workspace = true, features = ["default_fonts", "wgpu", "accesskit"] }
+eframe = { workspace = true, features = ["default_fonts", "wgpu"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }
@@ -33,6 +33,11 @@ image = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 sys-locale = { workspace = true }
+
+# eframe's `accesskit` feature does not build with the `android-native-activity` feature
+# (accesskit_winit supports only GameActivity on Android), so every other target keeps it.
+[target.'cfg(not(target_os = "android"))'.dependencies]
+eframe = { workspace = true, features = ["accesskit"] }
 
 [dev-dependencies]
 egui_kittest = { workspace = true, features = ["eframe", "wgpu"] }
