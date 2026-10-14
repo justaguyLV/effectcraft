@@ -126,3 +126,104 @@ jobs:
             --title "EffectCraft Android (latest build)" \
             --notes "arm64 + armeabi-v7a APK. Signing: $SIGNING"
           echo "https://github.com/$GITHUB_REPOSITORY/releases/download/android-latest/EffectCraft.apk"
+
+  # Runs the app in an Android emulator (x86_64, software Vulkan/GL) and publishes screenshots
+  # and logcat as the pre-release `android-test`, to see what a launch actually does.
+  emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-linux-android
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+          cache-bin: "true"
+          key: emulator
+
+      - name: Android SDK and NDK
+        run: |
+          set -eux
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0"
+          echo "ANDROID_NDK_ROOT=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+
+      - name: Install cargo-apk
+        run: cargo install cargo-apk --locked
+
+      - name: Throwaway keystore
+        run: |
+          set -eu
+          KS="$RUNNER_TEMP/test.keystore"
+          keytool -genkeypair -keystore "$KS" -storetype PKCS12 -storepass effectcraft-ci -keypass effectcraft-ci \
+            -alias ci -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=EffectCraft CI,O=CI,C=US"
+          echo "CARGO_APK_RELEASE_KEYSTORE=$KS" >> "$GITHUB_ENV"
+          echo "CARGO_APK_RELEASE_KEYSTORE_PASSWORD=effectcraft-ci" >> "$GITHUB_ENV"
+
+      - name: Build x86_64 APK
+        run: |
+          set +e
+          cargo apk build --release --lib -p effectcraft-android --target x86_64-linux-android > "$RUNNER_TEMP/build.log" 2>&1
+          rc=$?
+          if [ $rc -ne 0 ]; then
+            sel=$(grep -v -E "^ *(Compiling|Downloaded|Downloading|Fresh|Blocking|Updating|Locking|Adding) " "$RUNNER_TEMP/build.log" | tail -n 40 | cut -c1-300)
+            msg=$(printf '%s' "$sel" | tail -c 3500 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=x86_64 build failed::$msg"
+            exit $rc
+          fi
+          APK=$(find target -name '*.apk' -path '*release*' | head -n1)
+          echo "APK=$APK" >> "$GITHUB_ENV"
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run in the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: bash apps/effectcraft-android/ci-emulator.sh ${{ env.APK }}
+
+      - name: Report
+        if: always()
+        run: |
+          if [ -f emulator-out/logcat-filtered.txt ]; then
+            msg=$(tail -n 40 emulator-out/logcat-filtered.txt | cut -c1-260 | tail -c 3500 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::notice title=emulator logcat::$msg"
+          fi
+          if [ -f emulator-out/alive.txt ]; then
+            msg=$(cat emulator-out/device.txt emulator-out/alive.txt | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::notice title=emulator summary::$msg"
+          fi
+
+      - name: Publish test results
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -u
+          ls -l emulator-out || exit 0
+          gh release delete android-test --yes --cleanup-tag || true
+          gh release create android-test emulator-out/* --prerelease --target "$GITHUB_SHA" \
+            --title "Emulator test (x86_64, Android 11)" --notes "Screenshots and logcat from the emulator run of this build."
+
