@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write   # publishes the APK as a GitHub release
 
 concurrency:
   group: android-${{ github.ref }}
@@ -112,3 +112,17 @@ jobs:
           name: EffectCraft-android
           path: ${{ env.APK }}
           if-no-files-found: error
+
+      - name: Publish release (direct download link)
+        if: github.ref == 'refs/heads/android-port'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -eu
+          cp "$APK" EffectCraft.apk
+          gh release delete android-latest --yes --cleanup-tag || true
+          gh release create android-latest EffectCraft.apk --prerelease --target "$GITHUB_SHA" \
+            --title "EffectCraft Android (latest build)" \
+            --notes "arm64 + armeabi-v7a APK. Signing: $SIGNING"
+          echo "https://github.com/$GITHUB_REPOSITORY/releases/download/android-latest/EffectCraft.apk"
