@@ -35,12 +35,61 @@ impl eframe::App for Mobile {
     }
 }
 
-/// The device asks for the adapter's own limits, textures capped at 16384 px (as on desktop):
-/// phones' GPUs often offer less than eframe's default set.
+/// Minimal `block_on` for the one future we need before the window exists.
+fn block_on<F: std::future::Future>(fut: F) -> F::Output {
+    use std::sync::Arc;
+    use std::task::{Context, Poll, Wake, Waker};
+
+    struct Unpark(std::thread::Thread);
+    impl Wake for Unpark {
+        fn wake(self: Arc<Self>) {
+            self.0.unpark();
+        }
+    }
+    let waker = Waker::from(Arc::new(Unpark(std::thread::current())));
+    let mut cx = Context::from_waker(&waker);
+    let mut fut = std::pin::pin!(fut);
+    loop {
+        if let Poll::Ready(value) = fut.as_mut().poll(&mut cx) {
+            return value;
+        }
+        std::thread::park();
+    }
+}
+
+/// Vulkan if the phone has a Vulkan driver, OpenGL ES otherwise, never both.
+///
+/// With both enabled, wgpu opens a surface on the activity's window through each backend; the
+/// Vulkan one claims the window first and the GL one then fails with "already connected to
+/// another API" (`EGL_BAD_ALLOC`), which ends in `Surface::configure: Invalid surface` and a dead
+/// or black screen whenever the adapter that gets picked is the GL one.
+fn choose_backends() -> eframe::wgpu::Backends {
+    use eframe::wgpu;
+    let mut desc = wgpu::InstanceDescriptor::new_without_display_handle();
+    desc.backends = wgpu::Backends::VULKAN;
+    let instance = wgpu::Instance::new(desc);
+    let adapters = block_on(instance.enumerate_adapters(wgpu::Backends::VULKAN));
+    for adapter in &adapters {
+        let info = adapter.get_info();
+        log::info!("vulkan adapter: {} ({:?}, driver {})", info.name, info.device_type, info.driver_info);
+    }
+    if adapters.is_empty() {
+        log::warn!("no Vulkan adapter: falling back to OpenGL ES");
+        wgpu::Backends::GL
+    } else {
+        wgpu::Backends::VULKAN
+    }
+}
+
+/// One backend (see [`choose_backends`]); the device asks for the adapter's own limits, textures
+/// capped at 16384 px (as on desktop): phones' GPUs often offer less than eframe's default set.
 fn wgpu_options() -> eframe::WgpuConfiguration {
     use eframe::egui_wgpu::WgpuSetup;
     let mut config = eframe::WgpuConfiguration::default();
     if let WgpuSetup::CreateNew(setup) = &mut config.wgpu_setup {
+        let backends = choose_backends();
+        log::info!("wgpu backends: {backends:?}");
+        setup.instance_descriptor.backends = backends;
         setup.device_descriptor = std::sync::Arc::new(|adapter| {
             let limits = adapter.limits();
             eframe::wgpu::DeviceDescriptor {
