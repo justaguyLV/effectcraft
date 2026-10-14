@@ -18,6 +18,24 @@ sed -i 's|<color name="ic_launcher_background">#[0-9A-Fa-f]*</color>|<color name
 grep -q "FFC107" "$RES/values/colors.xml"
 grep -q "FFC107" "$RES/values/ic_launcher_background.xml"
 
+# 2b. The PLAY button is a green 9-patch image: shift every greenish pixel to yellow (keeps shading and alpha)
+python3 - "$RES/drawable/mine_button_unfocused.9.png" <<'PY'
+import sys, colorsys
+from PIL import Image
+path = sys.argv[1]
+im = Image.open(path).convert("RGBA")
+px = im.load()
+for y in range(im.height):
+    for x in range(im.width):
+        r, g, b, a = px[x, y]
+        if a and g > r and g > b:
+            h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+            nr, ng, nb = colorsys.hsv_to_rgb(48 / 360, min(1.0, s * 0.95), v)
+            px[x, y] = (int(nr * 255), int(ng * 255), int(nb * 255), a)
+im.save(path)
+print("button recoloured")
+PY
+
 # 3. Icons, from pojav-custom/logo.png
 python3 - "$RES" "$HERE/logo.png" <<'PY'
 import sys
