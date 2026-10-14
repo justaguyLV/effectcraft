@@ -1,0 +1,176 @@
+name: BlockComet (Pojav build)
+
+# Builds a customised PojavLauncher (yellow theme, own icon/name) that ships Fabric Loader, Fabric API and
+# Meteor Client for Minecraft 1.20.1 pre-installed, then runs it once in an emulator and records a video.
+#
+# Signing: with the repository secrets ANDROID_KEYSTORE_BASE64 (base64 of a .jks/.p12) and KEYSTORE_PASSWORD
+# the APK is signed with your key; without them it keeps Pojav's public debug key.
+
+on:
+  push:
+    branches: [pojav-custom]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pojav-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  POJAV_REPO: PojavLauncherTeam/PojavLauncher
+  POJAV_SHA: b12ad048157b3aa255d078c235dd4571e1900309
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch PojavLauncher (pinned commit)
+        run: |
+          set -eux
+          git init pojav
+          cd pojav
+          git remote add origin "https://github.com/$POJAV_REPO.git"
+          git fetch --depth 1 origin "$POJAV_SHA"
+          git checkout --quiet FETCH_HEAD
+          git log -1 --format='%h %s'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Android SDK and NDK
+        run: |
+          set -eux
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" "ndk;25.2.9519653"
+
+      - name: LTW (graphics translation layer)
+        run: |
+          mkdir -p pojav/app_pojavlauncher/libs
+          curl -fsSL --retry 4 -o pojav/app_pojavlauncher/libs/ltw-release.aar https://github.com/PojavLauncherTeam/LTW/releases/latest/download/ltw-release.aar
+          ls -l pojav/app_pojavlauncher/libs
+
+      - name: Java 17 runtime (all ABIs)
+        run: bash pojav-custom/run-logged.sh "JRE build" bash pojav-custom/build-jre.sh pojav/app_pojavlauncher/src/main/assets/components/jre-new
+
+      - name: Fabric, Fabric API and Meteor Client (1.20.1)
+        run: bash pojav-custom/run-logged.sh "Mods download" bash pojav-custom/build-mods.sh pojav/app_pojavlauncher/src/main/assets
+
+      - name: Apply BlockComet changes
+        run: |
+          pip install pillow
+          bash pojav-custom/run-logged.sh "apply.sh" bash pojav-custom/apply.sh pojav
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11"
+
+      - name: Language list
+        working-directory: pojav
+        run: bash ../pojav-custom/run-logged.sh "languagelist" ./scripts/languagelist_updater.sh
+
+      - name: Build GLFW stub and helper jars
+        working-directory: pojav
+        run: |
+          mkdir -p out
+          bash ../pojav-custom/run-logged.sh "jre_lwjgl3glfw" gradle :jre_lwjgl3glfw:build --no-daemon
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Build APK
+        working-directory: pojav
+        run: bash ../pojav-custom/run-logged.sh "assembleDebug" gradle :app_pojavlauncher:assembleDebug --no-daemon
+
+      - name: Sign
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          set -eu
+          SRC=$(find pojav/app_pojavlauncher/build/outputs/apk/debug -name '*.apk' | head -n1)
+          mkdir -p out
+          if [ -n "$KS_B64" ] && [ -n "$KS_PASS" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            "$ANDROID_HOME/build-tools/34.0.0/apksigner" sign --ks "$RUNNER_TEMP/release.keystore" --ks-pass env:KS_PASS --out out/BlockComet.apk "$SRC"
+            echo "SIGNING=your key (from secrets)" >> "$GITHUB_ENV"
+          else
+            cp "$SRC" out/BlockComet.apk
+            echo "SIGNING=Pojav public debug key (add the secrets for your own key)" >> "$GITHUB_ENV"
+          fi
+          ls -l out/BlockComet.apk
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose --print-certs out/BlockComet.apk | head -8
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BlockComet-apk
+          path: out/BlockComet.apk
+          if-no-files-found: error
+
+      - name: Publish release (direct download link)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -eu
+          gh release delete pojav-latest --yes --cleanup-tag || true
+          gh release create pojav-latest out/BlockComet.apk --prerelease --target "$GITHUB_SHA" \
+            --title "BlockComet Launcher (latest build)" \
+            --notes "PojavLauncher ${POJAV_SHA::7} + Fabric 1.20.1 + Fabric API + Meteor Client 0.5.4. Signing: $SIGNING"
+          echo "https://github.com/$GITHUB_REPOSITORY/releases/download/pojav-latest/BlockComet.apk"
+
+  emulator:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: BlockComet-apk
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run in the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: bash pojav-custom/emulator-run.sh BlockComet.apk
+
+      - name: Report
+        if: always()
+        run: |
+          for f in alive.txt game-files.txt device.txt; do
+            [ -f emulator-out/$f ] && { msg=$(head -c 3000 emulator-out/$f | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}'); echo "::notice title=emulator $f::$msg"; }
+          done
+          [ -f emulator-out/ui-log.txt ] && { msg=$(cut -c1-200 emulator-out/ui-log.txt | tail -n 45 | tail -c 3500 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}'); echo "::notice title=emulator ui-log::$msg"; }
+          true
+
+      - name: Publish test results
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -u
+          ls -l emulator-out || exit 0
+          gh release delete pojav-test --yes --cleanup-tag || true
+          gh release create pojav-test emulator-out/* --prerelease --target "$GITHUB_SHA" \
+            --title "Launcher emulator run" --notes "Video, screenshots and logs from running the APK in an Android 11 x86_64 emulator."
