@@ -41,18 +41,15 @@ echo "processes at end: $(running)" | tee -a "$OUT/alive.txt"
 
 # Were the bundled mods and the Fabric version file placed in the game directory?
 {
-  for d in /sdcard/games/PojavLauncher /sdcard/Android/data/$PKG/files; do
-    echo "--- $d"
-    adb shell "find $d -maxdepth 5 \( -name '*.jar' -path '*mods*' -o -name 'fabric-loader*.json' -o -name launcher_profiles.json \) 2>/dev/null"
-  done
-  echo "--- launcher_profiles.json"
-  adb shell "cat /sdcard/games/PojavLauncher/.minecraft/launcher_profiles.json 2>/dev/null || cat /sdcard/Android/data/$PKG/files/.minecraft/launcher_profiles.json 2>/dev/null"
-  echo "--- mods dir sizes"
-  adb shell "ls -l /sdcard/games/PojavLauncher/.minecraft/mods /sdcard/Android/data/$PKG/files/.minecraft/mods 2>/dev/null"
+  G=/sdcard/Android/data/$PKG/files/.minecraft
+  echo "--- ls -R $G (first 60 lines)"; adb shell "ls -R $G 2>&1 | head -60"
+  echo "--- mods"; adb shell "ls -l $G/mods 2>&1"
+  echo "--- launcher_profiles.json"; adb shell "cat $G/../.minecraft/launcher_profiles.json 2>&1 | head -20"
+  echo "--- versions"; adb shell "ls -l $G/versions 2>&1"
 } 2>&1 | tee "$OUT/game-files.txt"
 
-# let the recording finish, then pull it
-sleep 45
+# stop the recorder cleanly (SIGINT) so the MP4 gets finalised, then pull it
+adb shell "pkill -2 screenrecord" ; sleep 6
 adb pull /sdcard/rec.mp4 "$OUT/launcher-run.mp4" 2>&1 | tail -1
 adb logcat -d -v threadtime > "$OUT/logcat-full.txt"
 grep -E "pojav|Pojav|AndroidRuntime|FATAL|JREAuto|NewJRE|AsyncAsset|Internal" "$OUT/logcat-full.txt" | tail -n 150 > "$OUT/logcat-filtered.txt"
