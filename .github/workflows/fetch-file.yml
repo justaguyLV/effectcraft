@@ -1,0 +1,51 @@
+name: Fetch file
+
+# Downloads a file from a (public-link) Google Drive URL into a DRAFT release, so it is not publicly visible,
+# and prints what it is. Nothing from the file is executed.
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Google Drive share link"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download
+        env:
+          URL: ${{ inputs.url }}
+        run: |
+          set -eux
+          pip install gdown
+          gdown --fuzzy "$URL" -O upload.bin
+          ls -l upload.bin
+          file upload.bin
+          sha256sum upload.bin
+
+      - name: Inspect (no execution)
+        run: |
+          set +e
+          echo "== type"; file upload.bin
+          if unzip -tq upload.bin >/dev/null 2>&1; then
+            echo "== zip listing (first 60)"; unzip -l upload.bin | head -n 60
+            if unzip -l upload.bin | grep -q AndroidManifest.xml; then
+              echo "== android package info"
+              AAPT=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 2>/dev/null | tail -n1)
+              [ -n "$AAPT" ] && "$AAPT" dump badging upload.bin 2>&1 | grep -E "^package|application-label:|sdkVersion|native-code|launchable" | head -n 12
+            fi
+          fi
+          true
+
+      - name: Publish as a draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -eu
+          gh release delete uploaded-file --yes --cleanup-tag || true
+          gh release create uploaded-file upload.bin --draft --title "Uploaded file (draft)" --notes "Fetched from Drive. Draft = not public."
