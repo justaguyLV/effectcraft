@@ -23,9 +23,16 @@ jobs:
         env:
           URL: ${{ inputs.url || 'https://drive.google.com/file/d/1psTN2G1fWtVARVZDzPVHNWVoD8_JPk0q/view?usp=drivesdk' }}
         run: |
-          set -eux
-          pip install gdown
-          gdown --fuzzy "$URL" -O upload.bin
+          set +e
+          ID=$(printf '%s' "$URL" | sed -n 's#.*/d/\([A-Za-z0-9_-]*\).*#\1#p; s#.*[?&]id=\([A-Za-z0-9_-]*\).*#\1#p' | head -n1)
+          echo "drive id: ${ID:0:6}..."
+          curl -sS -L -o upload.bin -w "http %{http_code}, %{size_download} bytes, type %{content_type}\n" \
+            "https://drive.usercontent.google.com/download?id=$ID&export=download&confirm=t" 2>&1 | tee /tmp/curl.txt
+          if head -c 300 upload.bin | grep -qi "<html"; then
+            msg=$(head -c 1500 upload.bin | sed 's/<[^>]*>/ /g' | tr -s ' \n' ' ' | cut -c1-400)
+            echo "::error title=Drive returned a web page, not the file::$msg"
+            exit 1
+          fi
           ls -l upload.bin
           file upload.bin
           sha256sum upload.bin
