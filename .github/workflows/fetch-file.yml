@@ -3,11 +3,14 @@ name: Fetch file
 # Downloads a file from a (public-link) Google Drive URL into a DRAFT release, so it is not publicly visible,
 # and prints what it is. Nothing from the file is executed.
 on:
+  push:
+    branches: [fetch-tool]
   workflow_dispatch:
     inputs:
       url:
         description: "Google Drive share link"
-        required: true
+        required: false
+        default: "https://drive.google.com/file/d/1psTN2G1fWtVARVZDzPVHNWVoD8_JPk0q/view?usp=drivesdk"
 
 permissions:
   contents: write
@@ -18,7 +21,7 @@ jobs:
     steps:
       - name: Download
         env:
-          URL: ${{ inputs.url }}
+          URL: ${{ inputs.url || 'https://drive.google.com/file/d/1psTN2G1fWtVARVZDzPVHNWVoD8_JPk0q/view?usp=drivesdk' }}
         run: |
           set -eux
           pip install gdown
