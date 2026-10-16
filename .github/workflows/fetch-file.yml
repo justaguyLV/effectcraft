@@ -29,7 +29,9 @@ jobs:
           curl -sS -L -o upload.bin -w "http %{http_code}, %{size_download} bytes, type %{content_type}\n" \
             "https://drive.usercontent.google.com/download?id=$ID&export=download&confirm=t" 2>&1 | tee /tmp/curl.txt
           if head -c 300 upload.bin | grep -qi "<html"; then
-            msg=$(head -c 1500 upload.bin | sed 's/<[^>]*>/ /g' | tr -s ' \n' ' ' | cut -c1-400)
+            T=$(grep -o -i '<title>[^<]*</title>' upload.bin | head -n1 | sed 's/<[^>]*>//g')
+            B=$(sed 's/<style[^>]*>.*<\/style>//g; s/<script[^>]*>.*<\/script>//g; s/<[^>]*>/ /g' upload.bin | tr -s ' \n\t' ' ' | grep -o -i -E "(sign in|quota|too many users|can.t scan|permission|request access|not found|virus)[^.]{0,120}" | head -n3 | tr '\n' ';')
+            msg="title=[$T] hints=[$B] http=$(cat /tmp/curl.txt | head -n1)"
             echo "::error title=Drive returned a web page, not the file::$msg"
             exit 1
           fi
