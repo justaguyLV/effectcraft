@@ -81,10 +81,20 @@ jobs:
       - name: Accept Android SDK licenses
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
 
-      - name: Fabric, Fabric API and Meteor Client (1.20.1)
-        env:
-          WRITE_PROFILE: "0"
+      - name: Fabric, Fabric API and Meteor Client (several versions)
         run: bash copper-custom/run-logged.sh "Mods download" bash copper-custom/build-mods.sh copper/app_mojo/src/main/assets
+
+      - name: Fonts (Poppins, SIL OFL 1.1)
+        run: |
+          set -eu
+          D=copper/app_mojo/src/main/res/font
+          mkdir -p "$D"
+          for w in Regular Medium Bold; do
+            lw=$(echo "$w" | tr 'A-Z' 'a-z')
+            curl -fsSL --retry 3 -o "$D/poppins_$lw.ttf" "https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-$w.ttf"
+            python3 -c "d=open('$D/poppins_$lw.ttf','rb').read(4); assert d in (b'\\x00\\x01\\x00\\x00', b'OTTO', b'true'), d"
+          done
+          ls -l "$D"
 
       - name: Apply BlockComet changes
         run: |

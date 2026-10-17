@@ -1,75 +1,115 @@
 #!/usr/bin/env bash
-# Fetches Fabric Loader's version JSON, Fabric API and Meteor Client for Minecraft 1.20.1 and writes the
-# assets the launcher copies into the game directory on first start.
+# Prepares, for several Minecraft versions, a ready Fabric setup that the launcher turns into instances on first start:
+#   assets/custom/versions/<fabric-loader-X-GAME>.json      newest stable Fabric Loader for that game version
+#   assets/custom/mods/<GAME>/*.jar                          Fabric API + Meteor Client + performance mods
+# Meteor for 1.20.1-1.21.1 comes from the archive releases (SHA-256 pinned, both mirrors identical); newer versions are
+# tried from Meteor's own snapshot repository and skipped when not available. A version that cannot be completed is skipped.
 #   usage: build-mods.sh <assets-dir>
-set -euo pipefail
+set -uo pipefail
 A="$(mkdir -p "$1" && cd "$1" && pwd)"
-GAME=1.20.1
-LOADER=${LOADER:-latest}   # "latest" = newest stable Fabric Loader for $GAME at build time
-METEOR_VERSION=0.5.4
-METEOR_SHA256=90d558f4d32bf96cc5464b869bc69c0f677a1be62e94cb897acf117c0bf82b97
-METEOR_URLS=(
-  "https://raw.githubusercontent.com/ManInMyVan/meteor-archive/main/files/meteor-client/meteor-client-${METEOR_VERSION}.jar"
-  "https://raw.githubusercontent.com/Galax71/meteor-archive-and-Baritone-archive/master/files/meteor-client/meteor-client-${METEOR_VERSION}.jar"
-)
+UA="blockcomet-build (github.com/justaguyLV/effectcraft)"
 mkdir -p "$A/custom/mods" "$A/custom/versions"
+: > "$A/custom/bundled.txt"
+WORK="$(mktemp -d)"
 
-# Meteor Client: pinned by SHA-256
-ok=0
-for url in "${METEOR_URLS[@]}"; do
-  if curl -fsSL --retry 3 -o "$A/custom/mods/meteor-client-${METEOR_VERSION}.jar" "$url" \
-     && echo "${METEOR_SHA256}  $A/custom/mods/meteor-client-${METEOR_VERSION}.jar" | sha256sum -c -; then ok=1; break; fi
-done
-[ "$ok" = 1 ] || { echo "could not fetch a Meteor jar matching the pinned SHA-256"; exit 1; }
+# game  meteor-version  sha256
+STATIC=(
+  "1.20.1 0.5.4 90d558f4d32bf96cc5464b869bc69c0f677a1be62e94cb897acf117c0bf82b97"
+  "1.20.2 0.5.5 f957dd8364dfc66794b08f2bb3ebdceec822950dae67fb588e8daf7f4a9b7890"
+  "1.20.4 0.5.6 0058cfe2b24392bb6d84a7cbae10c66ecadfcef47b31e7fa5ad0e8f0b4f71c99"
+  "1.20.6 0.5.7 5de1f1d09664c1c8c60186a9385ae837b3d7c11e3ab919aa667eb7cf3f2ae3dc"
+  "1.21.1 0.5.8 090ad8f02273a67eca753ef37ccee2256e4dd3d715501ed75433ec8f57d7c5e9"
+)
+MIRRORS=(
+  "https://raw.githubusercontent.com/ManInMyVan/meteor-archive/main/files/meteor-client"
+  "https://raw.githubusercontent.com/Galax71/meteor-archive-and-Baritone-archive/master/files/meteor-client"
+)
 
-# Fabric API: newest build for 1.20.1, checked against Maven's own SHA-1
-M=https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api
-FAPI=$(curl -fsSL --retry 3 "$M/maven-metadata.xml" | grep -o '<version>[^<]*+1\.20\.1</version>' | sed 's/<[^>]*>//g' | sort -V | tail -1)
-[ -n "$FAPI" ] || { echo "no Fabric API for 1.20.1 found"; exit 1; }
-echo "Fabric API $FAPI"
-curl -fsSL --retry 3 -o "$A/custom/mods/fabric-api-$FAPI.jar" "$M/$FAPI/fabric-api-$FAPI.jar"
-want=$(curl -fsSL --retry 3 "$M/$FAPI/fabric-api-$FAPI.jar.sha1")
-echo "$want  $A/custom/mods/fabric-api-$FAPI.jar" | sha1sum -c -
+warn() { echo "::warning title=BlockComet $1::$2"; }
 
-# Fabric Loader: the launcher-profile JSON from Fabric's meta API
-if [ "$LOADER" = latest ]; then
-  LOADER=$(curl -fsSL --retry 3 "https://meta.fabricmc.net/v2/versions/loader/$GAME" | python3 -c "import sys,json; print(next(v['loader']['version'] for v in json.load(sys.stdin) if v['loader'].get('stable')))")
-fi
-echo "Fabric Loader $LOADER"
-curl -fsSL --retry 3 -o /tmp/fabric-version.json "https://meta.fabricmc.net/v2/versions/loader/$GAME/$LOADER/profile/json"
-ID=$(python3 -c "import json;d=json.load(open('/tmp/fabric-version.json'));assert d['inheritsFrom']=='$GAME';print(d['id'])")
-cp /tmp/fabric-version.json "$A/custom/versions/$ID.json"
-echo "Fabric version id: $ID"
+# install_game <game> <meteor-jar>: loader JSON + Fabric API + performance mods + Meteor. Returns 1 (and cleans up) on failure.
+install_game() {
+  local game="$1" meteor="$2" modsdir="$A/custom/mods/$1" id loader fapi json
+  mkdir -p "$modsdir"
+  loader=$(curl -fsSL --retry 3 "https://meta.fabricmc.net/v2/versions/loader/$game" | python3 -c "
+import sys, json
+print(next(v['loader']['version'] for v in json.load(sys.stdin) if v['loader'].get('stable')))") || { warn "$game" "no stable Fabric Loader"; rm -rf "$modsdir"; return 1; }
+  curl -fsSL --retry 3 -o "$WORK/$game.json" "https://meta.fabricmc.net/v2/versions/loader/$game/$loader/profile/json" || { warn "$game" "no loader profile"; rm -rf "$modsdir"; return 1; }
+  id=$(python3 -c "import json;d=json.load(open('$WORK/$game.json'));assert d['inheritsFrom']=='$game';print(d['id'])") || { warn "$game" "bad loader profile"; rm -rf "$modsdir"; return 1; }
 
-# Performance mods (Modrinth, newest release for $GAME on Fabric; sha512 from Modrinth's API is checked).
-# Not fatal: if one cannot be fetched the build goes on without it.
-for slug in ferrite-core lithium modernfix; do
-  (
-    set -e
-    json=$(curl -fsSL --retry 3 -H "User-Agent: blockcomet-build (github.com/justaguyLV/effectcraft)" \
-      "https://api.modrinth.com/v2/project/$slug/version?game_versions=%5B%22$GAME%22%5D&loaders=%5B%22fabric%22%5D")
-    read -r url name sha512 < <(printf '%s' "$json" | python3 -c "
+  local M=https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api
+  fapi=$(curl -fsSL --retry 3 "$M/maven-metadata.xml" | grep -o "<version>[^<]*+$game</version>" | sed 's/<[^>]*>//g' | sort -V | tail -1)
+  [ -n "$fapi" ] || { warn "$game" "no Fabric API"; rm -rf "$modsdir"; return 1; }
+  curl -fsSL --retry 3 -o "$modsdir/fabric-api-$fapi.jar" "$M/$fapi/fabric-api-$fapi.jar" \
+    && echo "$(curl -fsSL --retry 3 "$M/$fapi/fabric-api-$fapi.jar.sha1")  $modsdir/fabric-api-$fapi.jar" | sha1sum -c - >/dev/null \
+    || { warn "$game" "Fabric API download/verify failed"; rm -rf "$modsdir"; return 1; }
+
+  cp "$meteor" "$modsdir/$(basename "$meteor")"
+
+  # performance mods: optional, newest release for this game version, sha512 checked against Modrinth's API
+  local slug
+  for slug in ferrite-core lithium modernfix; do
+    (
+      set -e
+      json=$(curl -fsSL --retry 3 -H "User-Agent: $UA" "https://api.modrinth.com/v2/project/$slug/version?game_versions=%5B%22$game%22%5D&loaders=%5B%22fabric%22%5D")
+      read -r url name sha512 < <(printf '%s' "$json" | python3 -c "
 import sys, json
 versions = json.load(sys.stdin)
 releases = [v for v in versions if v['version_type'] == 'release'] or versions
 f = next(x for x in releases[0]['files'] if x['primary'])
 print(f['url'], f['filename'], f['hashes']['sha512'])")
-    curl -fsSL --retry 3 -o "$A/custom/mods/$name" "$url"
-    echo "$sha512  $A/custom/mods/$name" | sha512sum -c -
-    echo "perf mod: $name"
-  ) || echo "::warning title=Performance mod skipped::$slug could not be fetched or verified"
+      curl -fsSL --retry 3 -o "$modsdir/$name" "$url"
+      echo "$sha512  $modsdir/$name" | sha512sum -c - >/dev/null
+    ) || echo "   (no $slug for $game)"
+  done
+
+  cp "$WORK/$game.json" "$A/custom/versions/$id.json"
+  echo "$id" >> "$A/custom/bundled.txt"
+  echo "== $game: $id, mods: $(ls "$modsdir" | tr '\n' ' ')"
+}
+
+# 1) pinned releases
+declare -A HAVE
+for row in "${STATIC[@]}"; do
+  read -r game ver sha <<<"$row"
+  jar="$WORK/meteor-client-$ver.jar"; ok=0
+  for m in "${MIRRORS[@]}"; do
+    curl -fsSL --retry 3 -o "$jar" "$m/meteor-client-$ver.jar" && echo "$sha  $jar" | sha256sum -c - >/dev/null && { ok=1; break; }
+  done
+  [ "$ok" = 1 ] || { warn "$game" "Meteor $ver does not match the pinned SHA-256; skipped"; continue; }
+  install_game "$game" "$jar" && HAVE[$game]=1
 done
 
-# Pojav only: one profile, so it is the one the launcher starts with (Copper creates an instance in code)
-if [ "${WRITE_PROFILE:-1}" = 1 ]; then
-python3 - "$A/launcher_profiles.json" "$ID" <<'PY'
-import json, sys
-path, vid = sys.argv[1], sys.argv[2]
-json.dump({
-    "profiles": {"meteor-1-20-1": {"name": "Meteor Client 1.20.1", "lastVersionId": vid}},
-    "selectedProfile": "meteor-1-20-1",
-}, open(path, "w"), indent=2)
-PY
-cat "$A/launcher_profiles.json"
-fi
-ls -l "$A/custom/mods" "$A/custom/versions"
+# 2) newer Minecraft versions: Meteor's own snapshot repository, newest stable first, at most 2 successes
+got=0
+for game in $(curl -fsSL --retry 3 https://meta.fabricmc.net/v2/versions/game | python3 -c "
+import sys, json
+print(' '.join(v['version'] for v in json.load(sys.stdin) if v.get('stable'))[:2000])" | tr ' ' '\n' | head -n 12); do
+  [ "$game" = "1.21.1" ] && break
+  [ -n "${HAVE[$game]:-}" ] && continue
+  base="https://maven.meteordev.org/snapshots/meteordevelopment/meteor-client/${game}-SNAPSHOT"
+  value=$(curl -fsSL --retry 2 "$base/maven-metadata.xml" 2>/dev/null | python3 -c "
+import sys, xml.etree.ElementTree as ET
+try:
+    root = ET.fromstring(sys.stdin.read())
+    for sv in root.iter('snapshotVersion'):
+        if sv.findtext('extension') == 'jar' and not sv.findtext('classifier'):
+            print(sv.findtext('value')); break
+except Exception:
+    pass") || value=""
+  [ -n "$value" ] || { echo "-- $game: no Meteor snapshot"; continue; }
+  jar="$WORK/meteor-$game.jar"
+  curl -fsSL --retry 3 -o "$jar" "$base/meteor-client-$value.jar" || { echo "-- $game: snapshot download failed"; continue; }
+  python3 -c "
+import zipfile, json
+m = json.loads(zipfile.ZipFile('$jar').read('fabric.mod.json'))
+assert m['id'] == 'meteor-client'" 2>/dev/null || { warn "$game" "snapshot jar is not Meteor Client; skipped"; continue; }
+  echo "   Meteor snapshot $value sha256 $(sha256sum "$jar" | cut -d' ' -f1)"
+  install_game "$game" "$jar" && { HAVE[$game]=1; got=$((got + 1)); }
+  [ "$got" -ge 2 ] && break
+done
+
+rm -rf "$WORK"
+echo "---- bundled versions:"; cat "$A/custom/bundled.txt"
+[ -s "$A/custom/bundled.txt" ] || { echo "no version could be prepared"; exit 1; }
+du -sh "$A/custom"

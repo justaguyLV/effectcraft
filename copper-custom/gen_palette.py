@@ -14,20 +14,28 @@ def camel(token):  # md_on_primary_container -> onPrimaryContainer
     return parts[0] + "".join(p.capitalize() for p in parts[1:])
 
 OVERRIDE = {
-    False: {  # light
-        "md_primary": "#FFC107", "md_on_primary": "#3A2C00",
-        "md_primary_container": "#FFE08A", "md_on_primary_container": "#3A2C00",
-        "md_inverse_primary": "#FFC107",
+    False: {  # light: white surfaces, blue accents
+        "md_primary": "#1E88E5", "md_on_primary": "#FFFFFF",
+        "md_primary_container": "#D6E8FF", "md_on_primary_container": "#001B3D",
+        "md_inverse_primary": "#9CCAFF",
+        "md_background": "#FFFFFF", "md_on_background": "#101828",
+        "md_surface": "#FFFFFF", "md_on_surface": "#101828",
+        "md_surface_bright": "#FFFFFF", "md_surface_dim": "#D9DEE8",
+        "md_surface_variant": "#E1E8F4", "md_on_surface_variant": "#44505F",
+        "md_surface_container_lowest": "#FFFFFF", "md_surface_container_low": "#F5F8FF",
+        "md_surface_container": "#EEF3FC", "md_surface_container_high": "#E8EEF8",
+        "md_surface_container_highest": "#E1E8F4",
+        "md_outline": "#74808F", "md_outline_variant": "#C3CBD6",
     },
-    True: {  # dark
-        "md_primary": "#FFC107", "md_on_primary": "#3A2C00",
-        "md_primary_container": "#5A4400", "md_on_primary_container": "#FFE08A",
-        "md_inverse_primary": "#8A6A00",
+    True: {  # dark (only if the user picks it): deep blue-grey with light-blue accents
+        "md_primary": "#90CAF9", "md_on_primary": "#003258",
+        "md_primary_container": "#00497D", "md_on_primary_container": "#D1E4FF",
+        "md_inverse_primary": "#1E88E5",
     },
 }
 
 for dark, path in ((False, f"{res}/values/colors.xml"), (True, f"{res}/values-night/colors.xml")):
-    scheme = SchemeTonalSpot(Hct.from_int(0xFFFFC107), dark, 0.0)
+    scheme = SchemeTonalSpot(Hct.from_int(0xFF1E88E5), dark, 0.0)
     text = open(path, encoding="utf-8").read()
     def repl(m):
         token = m.group(1)
