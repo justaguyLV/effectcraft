@@ -92,7 +92,8 @@ jobs:
           for w in Regular Medium Bold; do
             lw=$(echo "$w" | tr 'A-Z' 'a-z')
             curl -fsSL --retry 3 -o "$D/poppins_$lw.ttf" "https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-$w.ttf"
-            python3 -c "d=open('$D/poppins_$lw.ttf','rb').read(4); assert d in (b'\\x00\\x01\\x00\\x00', b'OTTO', b'true'), d"
+            magic=$(head -c 4 "$D/poppins_$lw.ttf" | od -An -tx1 | tr -d ' \n')
+            case "$magic" in 00010000|4f54544f|74727565) ;; *) echo "not a font file: $magic"; exit 1;; esac
           done
           ls -l "$D"
 
