@@ -13,6 +13,10 @@ grep -rl 'name="app_short_name"\|name="app_name"' "$RES" --include=strings.xml -
 done
 grep -q ">BlockComet<" "$RES/values/strings.xml"
 
+# 1b. Community link
+sed -i 's|\(<string name="social_media_invite"[^>]*>\)[^<]*|\1https://discord.gg/5fhcfW2Ge|' "$RES/values/strings.xml"
+grep -q "discord.gg/5fhcfW2Ge" "$RES/values/strings.xml"
+
 # 2. Yellow Material 3 palette (light + dark) and icon background
 python3 "$HERE/gen_palette.py" "$RES"
 sed -i 's|<color name="ic_launcher_background">#[0-9A-Fa-f]*</color>|<color name="ic_launcher_background">#FFC107</color>|' "$RES/values/ic_launcher_background.xml"
