@@ -1,0 +1,192 @@
+name: BlockComet on Copper
+
+# Builds Copper Launcher (MojoLauncher based, LGPL-3.0) with a yellow theme, own icon/name and a first-run instance
+# that has Fabric Loader, Fabric API and Meteor Client for Minecraft 1.20.1 ready. Then runs it in an emulator.
+#
+# Signing: the repository secrets ANDROID_KEYSTORE_BASE64 + KEYSTORE_PASSWORD re-sign the APK with your key;
+# without them it keeps Copper's debug key.
+
+on:
+  push:
+    branches: [copper-custom]
+  workflow_dispatch:
+    inputs:
+      only_emulator:
+        description: "Skip the build; run the latest released APK in the emulator"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: copper-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  COPPER_REPO: CopperLauncher/Copper-Android
+  COPPER_SHA: cd19296137943c62503d548eadd2a6ff132b998f
+
+jobs:
+  build:
+    if: ${{ !inputs.only_emulator }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch Copper (pinned commit, with submodules)
+        run: |
+          set -eux
+          git init copper
+          cd copper
+          git remote add origin "https://github.com/$COPPER_REPO.git"
+          git fetch --depth 1 origin "$COPPER_SHA"
+          git checkout --quiet FETCH_HEAD
+          git submodule update --init --depth 1 --recursive
+          git log -1 --format='%h %s'
+
+      - name: Get LTW
+        uses: dawidd6/action-download-artifact@v6
+        continue-on-error: true
+        with:
+          repo: MojoLauncher/LTW
+          workflow: android.yml
+          workflow_conclusion: success
+          name: output-aar
+          path: copper/app_mojo/libs
+
+      - name: Get Mesa
+        uses: dawidd6/action-download-artifact@v6
+        continue-on-error: true
+        with:
+          repo: CopperLauncher/Mesa-AAR-Builder
+          workflow: build-aar.yml
+          workflow_conclusion: success
+          name: mesa.aar
+          path: copper/app_mojo/libs
+
+      - name: Check the libraries
+        run: ls -l copper/app_mojo/libs || echo "no libs dir"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14.5"
+
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+
+      - name: Fabric, Fabric API and Meteor Client (1.20.1)
+        env:
+          WRITE_PROFILE: "0"
+        run: bash copper-custom/run-logged.sh "Mods download" bash copper-custom/build-mods.sh copper/app_mojo/src/main/assets
+
+      - name: Apply BlockComet changes
+        run: |
+          pip install pillow materialyoucolor
+          bash copper-custom/run-logged.sh "apply.sh" bash copper-custom/apply.sh copper
+
+      - name: Build APK
+        working-directory: copper
+        env:
+          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+        run: bash ../copper-custom/run-logged.sh "assembleFullDebug" gradle :app_mojo:assembleFullDebug --no-daemon
+
+      - name: Sign
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          set -eu
+          SRC=$(find copper/app_mojo/build/outputs/apk/full/debug -name '*.apk' | head -n1)
+          mkdir -p out
+          if [ -n "$KS_B64" ] && [ -n "$KS_PASS" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            "$ANDROID_HOME/build-tools/34.0.0/apksigner" sign --ks "$RUNNER_TEMP/release.keystore" --ks-pass env:KS_PASS --out out/BlockComet.apk "$SRC"
+            echo "SIGNING=your key (from secrets)" >> "$GITHUB_ENV"
+          else
+            cp "$SRC" out/BlockComet.apk
+            echo "SIGNING=Copper debug key (add the secrets for your own key)" >> "$GITHUB_ENV"
+          fi
+          ls -l out/BlockComet.apk
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose --print-certs out/BlockComet.apk | head -8
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BlockComet-copper-apk
+          path: out/BlockComet.apk
+          if-no-files-found: error
+
+      - name: Publish release (direct download link)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -eu
+          gh release delete copper-latest --yes --cleanup-tag || true
+          gh release create copper-latest out/BlockComet.apk --prerelease --target "$GITHUB_SHA" \
+            --title "BlockComet on Copper (latest build)" \
+            --notes "Copper ${COPPER_SHA::7} + Fabric 1.20.1 + Fabric API + Meteor Client 0.5.4. Signing: $SIGNING"
+          echo "https://github.com/$GITHUB_REPOSITORY/releases/download/copper-latest/BlockComet.apk"
+
+  emulator:
+    needs: build
+    if: ${{ always() && (needs.build.result == 'success' || inputs.only_emulator) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.only_emulator }}
+        with:
+          name: BlockComet-copper-apk
+
+      - name: Download the released APK
+        if: ${{ inputs.only_emulator }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release download copper-latest -p BlockComet.apk
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run in the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: bash copper-custom/emulator-run.sh BlockComet.apk
+
+      - name: Report
+        if: always()
+        run: |
+          for f in alive.txt game-files.txt device.txt; do
+            [ -f emulator-out/$f ] && { msg=$(head -c 3000 emulator-out/$f | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}'); echo "::notice title=emulator $f::$msg"; }
+          done
+          [ -f emulator-out/ui-log.txt ] && { msg=$(cut -c1-200 emulator-out/ui-log.txt | tail -n 45 | tail -c 3500 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}'); echo "::notice title=emulator ui-log::$msg"; }
+          true
+
+      - name: Publish test results
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -u
+          ls -l emulator-out || exit 0
+          gh release delete copper-test --yes --cleanup-tag || true
+          gh release create copper-test emulator-out/* --prerelease --target "$GITHUB_SHA" \
+            --title "Launcher emulator run" --notes "Video, screenshots and logs from running the APK in an Android 11 x86_64 emulator."
