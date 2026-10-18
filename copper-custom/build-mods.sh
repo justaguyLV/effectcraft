@@ -46,9 +46,9 @@ print(next(v['loader']['version'] for v in json.load(sys.stdin) if v['loader'].g
 
   cp "$meteor" "$modsdir/$(basename "$meteor")"
 
-  # performance mods: optional, newest release for this game version, sha512 checked against Modrinth's API
+  # performance mods (not Sodium: its OpenGL needs are risky on phones; chosen not to break Meteor's ESP/X-ray either): optional, newest release for this game version, sha512 checked against Modrinth's API
   local slug
-  for slug in ferrite-core lithium modernfix; do
+  for slug in ferrite-core lithium modernfix krypton noisium memoryleakfix scalablelux; do
     (
       set -e
       json=$(curl -fsSL --retry 3 -H "User-Agent: $UA" "https://api.modrinth.com/v2/project/$slug/version?game_versions=%5B%22$game%22%5D&loaders=%5B%22fabric%22%5D")

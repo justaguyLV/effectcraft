@@ -352,4 +352,138 @@ t = t.replace(old, new, 1)
 open(inst_path, "w", encoding="utf-8").write(t)
 print("java patched")
 PY
+# 7. Our logo as the instance icon (replaces Copper's ingot for every instance that has no icon of its own)
+python3 - "$RES" "$HERE/logo.png" <<'PY'
+import sys, os
+from PIL import Image
+res, logo = sys.argv[1], sys.argv[2]
+os.makedirs(f"{res}/drawable-nodpi", exist_ok=True)
+Image.open(logo).convert("RGBA").resize((256, 256), Image.LANCZOS).save(f"{res}/drawable-nodpi/ic_blockcomet.png")
+print("instance icon written")
+PY
+python3 - "$JAVA/instances/InstanceIconProvider.java" "$JAVA/instances/Instances.java" <<'PY'
+import sys
+p, inst = sys.argv[1], sys.argv[2]
+s = open(p, encoding="utf-8").read()
+old = 'sStaticIcons.put("default", R.drawable.ic_mojo_full);'
+assert old in s, "default icon line not found"
+s = s.replace(old, 'sStaticIcons.put("default", R.drawable.ic_blockcomet);\n        sStaticIcons.put("blockcomet", R.drawable.ic_blockcomet);', 1)
+open(p, "w", encoding="utf-8").write(s)
+t = open(inst, encoding="utf-8").read()
+old2 = "                instance.versionId = versionId;\n            }, null);\n            prefs.edit()"
+assert old2 in t, "bundled instance setter not found"
+t = t.replace(old2, '                instance.versionId = versionId;\n                instance.icon = "blockcomet";\n            }, null);\n            prefs.edit()', 1)
+open(inst, "w", encoding="utf-8").write(t)
+print("icon provider patched")
+PY
+
+# 8. "Wiki" becomes an in-app "About" page (no web link)
+python3 - "$RES" "$JAVA" <<'PY'
+import sys, glob, re
+res, java = sys.argv[1], sys.argv[2]
+# the tab is called About in every language (default text; Arabic below)
+for path in glob.glob(res + "/values*/strings.xml"):
+    s = open(path, encoding="utf-8").read()
+    if path.endswith("/values/strings.xml"):
+        s = re.sub(r'(<string name="mcl_tab_wiki"[^>]*>)[^<]*', r'\1About', s)
+    else:
+        s = re.sub(r'[ \t]*<string name="mcl_tab_wiki"[^>]*>[^<]*</string>\n?', '', s)
+    open(path, "w", encoding="utf-8").write(s)
+import os
+os.makedirs(res + "/values-ar", exist_ok=True)
+
+about_en = """<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="blockcomet_about_title">About BlockComet Launcher</string>
+    <string name="blockcomet_about_discord">Discord</string>
+    <string name="blockcomet_about_body"><![CDATA[
+<b>BlockComet Launcher</b> is a Minecraft: Java Edition launcher for Android, built on Copper Launcher (MojoLauncher / PojavLauncher, LGPL-3.0).<br><br>
+<b>Ready-to-play instances</b><br>
+Meteor 1.20.1, 1.20.2, 1.20.4, 1.20.6, 1.21.1 and the newest versions come pre-installed with the newest stable Fabric Loader, Fabric API, Meteor Client and performance mods (FerriteCore, Lithium, ModernFix, Krypton, Noisium, MemoryLeakFix and ScalableLux, wherever each one exists for that version).<br><br>
+<b>Getting started</b><br>
+1. Sign in with your Microsoft account (Minecraft: Java Edition is needed to play).<br>
+2. Pick an instance in the bar at the bottom and press Play.<br>
+3. Add more mods, resource packs or shaders from Browse Content (Modrinth).<br><br>
+<b>Language</b><br>
+Settings, then Launcher appearance, then Language.<br><br>
+<b>Please note</b><br>
+Meteor Client is a utility (hacked) client. Many multiplayer servers forbid it, so use it only where it is allowed. Its own menus are in English.<br><br>
+<b>Credits and licenses</b><br>
+Copper Launcher, MojoLauncher and PojavLauncher (LGPL-3.0); Meteor Client (GPL-3.0); Fabric Loader and Fabric API; FerriteCore, Lithium, ModernFix, Krypton, Noisium, MemoryLeakFix, ScalableLux and their authors.
+    ]]></string>
+</resources>
+"""
+about_ar = """<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mcl_tab_wiki">حول</string>
+    <string name="blockcomet_about_title">عن مشغّل BlockComet</string>
+    <string name="blockcomet_about_discord">ديسكورد</string>
+    <string name="blockcomet_about_body"><![CDATA[
+<b>BlockComet</b> مشغّل لماينكرافت: نسخة جافا على أندرويد، مبني على Copper Launcher (المبني على MojoLauncher وPojavLauncher بترخيص LGPL-3.0).<br><br>
+<b>نسخ جاهزة للّعب</b><br>
+نسخ Meteor للإصدارات 1.20.1 و1.20.2 و1.20.4 و1.20.6 و1.21.1 وأحدث الإصدارات مثبّتة مسبقًا مع أحدث Fabric Loader مستقر، وFabric API، وMeteor Client، ومودات الأداء (FerriteCore وLithium وModernFix وKrypton وNoisium وMemoryLeakFix وScalableLux، حيثما توفّر كل مود لذلك الإصدار).<br><br>
+<b>البداية</b><br>
+1. سجّل الدخول بحساب Microsoft (تحتاج نسخة ماينكرافت جافا للّعب).<br>
+2. اختر نسخة من الشريط في الأسفل واضغط ابدأ اللعب.<br>
+3. أضف مودات أو حزم موارد أو شيدرز من تصفّح المحتوى (Modrinth).<br><br>
+<b>اللغة</b><br>
+الإعدادات ثم مظهر المشغّل ثم اللغة.<br><br>
+<b>تنبيه</b><br>
+Meteor Client عميل مساعد (هاك). كثير من السيرفرات تمنعه، فاستخدمه فقط حيث يُسمح بذلك. وقوائمه نفسها بالإنجليزية.<br><br>
+<b>الشكر والتراخيص</b><br>
+Copper Launcher وMojoLauncher وPojavLauncher (LGPL-3.0)؛ وMeteor Client (GPL-3.0)؛ وFabric Loader وFabric API؛ وFerriteCore وLithium وModernFix وKrypton وNoisium وMemoryLeakFix وScalableLux وأصحابها.
+    ]]></string>
+</resources>
+"""
+open(res + "/values/blockcomet_about.xml", "w", encoding="utf-8").write(about_en)
+open(res + "/values-ar/blockcomet_about.xml", "w", encoding="utf-8").write(about_ar)
+
+java_src = """package git.artdeell.mojo;
+
+import android.app.Activity;
+import android.widget.TextView;
+
+import androidx.appcompat.app.AlertDialog;
+import androidx.core.text.HtmlCompat;
+
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+
+/** BlockComet: the in-app page that replaces the old "Wiki" web link. */
+public final class BlockCometAbout {
+    private BlockCometAbout() {}
+
+    public static void show(Activity activity) {
+        CharSequence body = HtmlCompat.fromHtml(activity.getString(R.string.blockcomet_about_body), HtmlCompat.FROM_HTML_MODE_COMPACT);
+        AlertDialog dialog = new MaterialAlertDialogBuilder(activity)
+                .setTitle(R.string.blockcomet_about_title)
+                .setMessage(body)
+                .setPositiveButton(android.R.string.ok, null)
+                .setNeutralButton(R.string.blockcomet_about_discord,
+                        (d, w) -> Tools.openURL(activity, activity.getString(R.string.social_media_invite)))
+                .show();
+        TextView message = dialog.findViewById(android.R.id.message);
+        if (message != null) message.setTextIsSelectable(true);
+    }
+}
+"""
+open(java + "/BlockCometAbout.java", "w", encoding="utf-8").write(java_src)
+
+for rel, old, new in (
+    ("fragments/RightPaneHomeFragment.java",
+     "newsButton.setOnClickListener(v -> Tools.openURL(requireActivity(), Tools.URL_HOME));",
+     "newsButton.setOnClickListener(v -> git.artdeell.mojo.BlockCometAbout.show(requireActivity()));"),
+    ("fragments/MainMenuFragment.java",
+     "mNewsButton.setOnClickListener(v -> Tools.openURL(requireActivity(), Tools.URL_HOME));",
+     "mNewsButton.setOnClickListener(v -> git.artdeell.mojo.BlockCometAbout.show(requireActivity()));"),
+):
+    f = java + "/" + rel
+    t = open(f, encoding="utf-8").read()
+    assert old in t, "wiki handler not found in " + rel
+    open(f, "w", encoding="utf-8").write(t.replace(old, new, 1))
+print("about page added")
+PY
+
+# 9. More customisation: surface/background style, corner roundness and font, each independent of the accent colour
+python3 "$HERE/look.py" "$RES" "$JAVA"
+
 echo "apply.sh: done"
