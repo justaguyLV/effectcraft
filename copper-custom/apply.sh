@@ -486,4 +486,7 @@ PY
 # 9. More customisation: surface/background style, corner roundness and font, each independent of the accent colour
 python3 "$HERE/look.py" "$RES" "$JAVA"
 
+# 10. Color Studio: exact colours chosen by the user (own screen, own module)
+python3 "$HERE/studio.py" "$RES" "$JAVA" "$MANIFEST" "$HERE"
+
 echo "apply.sh: done"
