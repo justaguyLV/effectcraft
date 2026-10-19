@@ -489,4 +489,16 @@ python3 "$HERE/look.py" "$RES" "$JAVA"
 # 10. Color Studio: exact colours chosen by the user (own screen, own module)
 python3 "$HERE/studio.py" "$RES" "$JAVA" "$MANIFEST" "$HERE"
 
+# 11. Fonts: many presets, Arabic-friendly default, import of any .ttf/.otf file
+python3 "$HERE/fonts.py" "$RES" "$JAVA" "$HERE"
+
+# 12. Arabic text for every string the launcher ships without it
+python3 "$HERE/translate_ar.py" "$RES"
+
+# 13. Right-to-left layouts (icons and text mirrored in Arabic instead of Arabic text inside a left-to-right layout)
+if ! grep -q 'android:supportsRtl' "$MANIFEST"; then
+  sed -i '0,/<application/s//<application android:supportsRtl="true"/' "$MANIFEST"
+fi
+grep -q 'android:supportsRtl="true"' "$MANIFEST"
+
 echo "apply.sh: done"

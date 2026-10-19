@@ -82,18 +82,11 @@ EN = """<?xml version="1.0" encoding="utf-8"?>
         <item>Soft (default)</item>
         <item>Pill</item>
     </string-array>
-    <string-array name="blockcomet_font_names">
-        <item>BlockComet (Poppins)</item>
-        <item>System font</item>
-    </string-array>
     <string-array name="blockcomet_surface_values" translatable="false">
         <item>tinted</item><item>white</item><item>gray</item><item>graphite</item><item>black</item>
     </string-array>
     <string-array name="blockcomet_corners_values" translatable="false">
         <item>sharp</item><item>soft</item><item>pill</item>
-    </string-array>
-    <string-array name="blockcomet_font_values" translatable="false">
-        <item>poppins</item><item>system</item>
     </string-array>
 </resources>
 """
@@ -113,10 +106,6 @@ AR = """<?xml version="1.0" encoding="utf-8"?>
         <item>حادة</item>
         <item>ناعمة (افتراضي)</item>
         <item>دائرية كاملة</item>
-    </string-array>
-    <string-array name="blockcomet_font_names">
-        <item>BlockComet (Poppins)</item>
-        <item>خط النظام</item>
     </string-array>
 </resources>
 """
@@ -147,7 +136,6 @@ def list_pref(key, default, title, names, values):
 prefs = (
     list_pref("theme_surface", "tinted", "blockcomet_surface_title", "blockcomet_surface_names", "blockcomet_surface_values")
     + list_pref("theme_corners", "soft", "blockcomet_corners_title", "blockcomet_corners_names", "blockcomet_corners_values")
-    + list_pref("theme_font", "poppins", "blockcomet_font_title", "blockcomet_font_names", "blockcomet_font_values")
     + "\n    "
 )
 open(xp, "w", encoding="utf-8").write(x[:j] + prefs + x[j:])
@@ -175,9 +163,6 @@ METHOD = """    /** BlockComet: surface style, corner roundness and font, applie
             case "sharp": theme.applyStyle(R.style.ThemeOverlay_BlockComet_CornersSharp, true); break;
             case "pill": theme.applyStyle(R.style.ThemeOverlay_BlockComet_CornersPill, true); break;
             default: break;
-        }
-        if ("system".equals(preferences.getString("theme_font", "poppins"))) {
-            theme.applyStyle(R.style.ThemeOverlay_BlockComet_SystemFont, true);
         }
     }
 

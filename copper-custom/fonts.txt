@@ -1,0 +1,33 @@
+# local-name  path in github.com/google/fonts  [required]
+poppins_regular ofl/poppins/Poppins-Regular.ttf required
+poppins_medium ofl/poppins/Poppins-Medium.ttf required
+poppins_bold ofl/poppins/Poppins-Bold.ttf required
+tajawal_regular ofl/tajawal/Tajawal-Regular.ttf required
+tajawal_medium ofl/tajawal/Tajawal-Medium.ttf
+tajawal_bold ofl/tajawal/Tajawal-Bold.ttf required
+almarai_regular ofl/almarai/Almarai-Regular.ttf
+almarai_bold ofl/almarai/Almarai-Bold.ttf
+plexarabic_regular ofl/ibmplexsansarabic/IBMPlexSansArabic-Regular.ttf
+plexarabic_medium ofl/ibmplexsansarabic/IBMPlexSansArabic-Medium.ttf
+plexarabic_bold ofl/ibmplexsansarabic/IBMPlexSansArabic-Bold.ttf
+amiri_regular ofl/amiri/Amiri-Regular.ttf
+amiri_bold ofl/amiri/Amiri-Bold.ttf
+cairo_var ofl/cairo/Cairo[slnt,wght].ttf
+notokufi_var ofl/notokufiarabic/NotoKufiArabic[wght].ttf
+lato_regular ofl/lato/Lato-Regular.ttf
+lato_bold ofl/lato/Lato-Bold.ttf
+ubuntu_regular ufl/ubuntu/Ubuntu-Regular.ttf
+ubuntu_bold ufl/ubuntu/Ubuntu-Bold.ttf
+montserrat_var ofl/montserrat/Montserrat[wght].ttf
+nunito_var ofl/nunito/Nunito[wght].ttf
+quicksand_var ofl/quicksand/Quicksand[wght].ttf
+rubik_var ofl/rubik/Rubik[wght].ttf
+oswald_var ofl/oswald/Oswald[wght].ttf
+orbitron_var ofl/orbitron/Orbitron[wght].ttf
+robotomono_var ofl/robotomono/RobotoMono[wght].ttf
+pressstart_regular ofl/pressstart2p/PressStart2P-Regular.ttf
+vt323_regular ofl/vt323/VT323-Regular.ttf
+silkscreen_regular ofl/silkscreen/Silkscreen-Regular.ttf
+silkscreen_bold ofl/silkscreen/Silkscreen-Bold.ttf
+pacifico_regular ofl/pacifico/Pacifico-Regular.ttf
+bebas_regular ofl/bebasneue/BebasNeue-Regular.ttf

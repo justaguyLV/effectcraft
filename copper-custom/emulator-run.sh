@@ -12,6 +12,14 @@ running() { adb shell "ps -A | grep -c $PKG" | tr -d '\r'; }
 adb wait-for-device
 { echo "android $(adb shell getprop ro.build.version.release | tr -d '\r') sdk $(adb shell getprop ro.build.version.sdk | tr -d '\r')"
   echo "abis $(adb shell getprop ro.product.cpu.abilist | tr -d '\r')"; } | tee "$OUT/device.txt"
+if [ -n "${EMU_LOCALE:-}" ]; then
+  adb root >/dev/null 2>&1; sleep 3
+  adb shell "setprop persist.sys.locale $EMU_LOCALE"
+  adb shell "stop; start"
+  sleep 8; adb wait-for-device
+  for _ in $(seq 1 60); do [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ] && break; sleep 2; done
+  echo "locale: $(adb shell getprop persist.sys.locale | tr -d '\r')" | tee -a "$OUT/device.txt"
+fi
 adb install -r "$APK" 2>&1 | tee "$OUT/install.txt"
 adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS 2>/dev/null
 adb logcat -c

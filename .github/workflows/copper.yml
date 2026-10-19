@@ -84,18 +84,8 @@ jobs:
       - name: Fabric, Fabric API and Meteor Client (several versions)
         run: bash copper-custom/run-logged.sh "Mods download" bash copper-custom/build-mods.sh copper/app_mojo/src/main/assets
 
-      - name: Fonts (Poppins, SIL OFL 1.1)
-        run: |
-          set -eu
-          D=copper/app_mojo/src/main/res/font
-          mkdir -p "$D"
-          for w in Regular Medium Bold; do
-            lw=$(echo "$w" | tr 'A-Z' 'a-z')
-            curl -fsSL --retry 3 -o "$D/poppins_$lw.ttf" "https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-$w.ttf"
-            magic=$(head -c 4 "$D/poppins_$lw.ttf" | od -An -tx1 | tr -d ' \n')
-            case "$magic" in 00010000|4f54544f|74727565) ;; *) echo "not a font file: $magic"; exit 1;; esac
-          done
-          ls -l "$D"
+      - name: Fonts (Google Fonts, SIL OFL 1.1 / Ubuntu Font Licence)
+        run: bash copper-custom/run-logged.sh "Fonts" bash copper-custom/fetch-fonts.sh copper/app_mojo/src/main/res/font
 
       - name: Apply BlockComet changes
         run: |
@@ -179,7 +169,7 @@ jobs:
           target: google_apis
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: bash copper-custom/emulator-run.sh BlockComet.apk
+          script: EMU_LOCALE=ar-EG bash copper-custom/emulator-run.sh BlockComet.apk
 
       - name: Report
         if: always()
