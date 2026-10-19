@@ -500,5 +500,6 @@ if ! grep -q 'android:supportsRtl' "$MANIFEST"; then
   sed -i '0,/<application/s//<application android:supportsRtl="true"/' "$MANIFEST"
 fi
 grep -q 'android:supportsRtl="true"' "$MANIFEST"
+python3 "$HERE/rtlfix.py" "$RES"
 
 echo "apply.sh: done"
