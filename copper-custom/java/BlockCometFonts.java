@@ -61,6 +61,10 @@ public final class BlockCometFonts implements Application.ActivityLifecycleCallb
         return new File(context.getFilesDir(), CUSTOM_FILE);
     }
 
+    public static File getCustomFont(Context context) {
+        return customFile(context);
+    }
+
     public static boolean hasCustom(Context context) {
         File file = customFile(context);
         return file.isFile() && file.length() > 0;

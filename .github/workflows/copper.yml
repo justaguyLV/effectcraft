@@ -9,6 +9,13 @@ name: BlockComet on Copper
 on:
   push:
     branches: [copper-custom]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - 'COPYING'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/pull_request_template.md'
   workflow_dispatch:
     inputs:
       only_emulator:

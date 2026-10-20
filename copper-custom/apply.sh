@@ -492,6 +492,12 @@ python3 "$HERE/studio.py" "$RES" "$JAVA" "$MANIFEST" "$HERE"
 # 11. Fonts: many presets, Arabic-friendly default, import of any .ttf/.otf file
 python3 "$HERE/fonts.py" "$RES" "$JAVA" "$HERE"
 
+# 11b. Share my look: export / import colours, font, language and background as one file
+python3 "$HERE/look_share.py" "$RES" "$JAVA" "$HERE"
+
+# 11c. Hotbar touch area fix + diagnostic overlay
+python3 "$HERE/hotbar.py" "$RES" "$JAVA"
+
 # 12. Arabic text for every string the launcher ships without it
 python3 "$HERE/translate_ar.py" "$RES"
 
