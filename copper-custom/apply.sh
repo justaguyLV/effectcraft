@@ -396,6 +396,7 @@ about_en = """<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="blockcomet_about_title">About BlockComet Launcher</string>
     <string name="blockcomet_about_discord">Discord</string>
+    <string name="blockcomet_about_licenses">Licenses</string>
     <string name="blockcomet_about_body"><![CDATA[
 <b>BlockComet Launcher</b> is a Minecraft: Java Edition launcher for Android, built on Copper Launcher (MojoLauncher / PojavLauncher, LGPL-3.0).<br><br>
 <b>Ready-to-play instances</b><br>
@@ -409,7 +410,9 @@ Settings, then Launcher appearance, then Language.<br><br>
 <b>Please note</b><br>
 Meteor Client is a utility (hacked) client. Many multiplayer servers forbid it, so use it only where it is allowed. Its own menus are in English.<br><br>
 <b>Credits and licenses</b><br>
-Copper Launcher, MojoLauncher and PojavLauncher (LGPL-3.0); Meteor Client (GPL-3.0); Fabric Loader and Fabric API; FerriteCore, Lithium, ModernFix, Krypton, Noisium, MemoryLeakFix, ScalableLux and their authors.
+Copper Launcher, MojoLauncher and PojavLauncher (LGPL-3.0); Meteor Client (GPL-3.0); Fabric Loader and Fabric API; FerriteCore, Lithium, ModernFix, Krypton, Noisium, MemoryLeakFix, ScalableLux and their authors.<br><br>
+<b>Source code</b><br>
+This is free software. Its source code and build recipe: <a href="@SOURCE_URL@">@SOURCE_URL@</a>. Tap Licenses for the full notices.
     ]]></string>
 </resources>
 """
@@ -418,6 +421,7 @@ about_ar = """<?xml version="1.0" encoding="utf-8"?>
     <string name="mcl_tab_wiki">حول</string>
     <string name="blockcomet_about_title">عن مشغّل BlockComet</string>
     <string name="blockcomet_about_discord">ديسكورد</string>
+    <string name="blockcomet_about_licenses">التراخيص</string>
     <string name="blockcomet_about_body"><![CDATA[
 <b>BlockComet</b> مشغّل لماينكرافت: نسخة جافا على أندرويد، مبني على Copper Launcher (المبني على MojoLauncher وPojavLauncher بترخيص LGPL-3.0).<br><br>
 <b>نسخ جاهزة للّعب</b><br>
@@ -431,7 +435,9 @@ about_ar = """<?xml version="1.0" encoding="utf-8"?>
 <b>تنبيه</b><br>
 Meteor Client عميل مساعد (هاك). كثير من السيرفرات تمنعه، فاستخدمه فقط حيث يُسمح بذلك. وقوائمه نفسها بالإنجليزية.<br><br>
 <b>الشكر والتراخيص</b><br>
-Copper Launcher وMojoLauncher وPojavLauncher (LGPL-3.0)؛ وMeteor Client (GPL-3.0)؛ وFabric Loader وFabric API؛ وFerriteCore وLithium وModernFix وKrypton وNoisium وMemoryLeakFix وScalableLux وأصحابها.
+Copper Launcher وMojoLauncher وPojavLauncher (LGPL-3.0)؛ وMeteor Client (GPL-3.0)؛ وFabric Loader وFabric API؛ وFerriteCore وLithium وModernFix وKrypton وNoisium وMemoryLeakFix وScalableLux وأصحابها.<br><br>
+<b>الكود المصدري</b><br>
+هذا برنامج حر. الكود المصدري ووصفة البناء: <a href="@SOURCE_URL@">@SOURCE_URL@</a>. اضغط «التراخيص» للإشعارات الكاملة.
     ]]></string>
 </resources>
 """
@@ -460,9 +466,28 @@ public final class BlockCometAbout {
                 .setPositiveButton(android.R.string.ok, null)
                 .setNeutralButton(R.string.blockcomet_about_discord,
                         (d, w) -> Tools.openURL(activity, activity.getString(R.string.social_media_invite)))
+                .setNegativeButton(R.string.blockcomet_about_licenses, (d, w) -> showLicenses(activity))
                 .show();
         TextView message = dialog.findViewById(android.R.id.message);
-        if (message != null) message.setTextIsSelectable(true);
+        if (message != null) message.setMovementMethod(android.text.method.LinkMovementMethod.getInstance());
+    }
+
+    private static void showLicenses(Activity activity) {
+        String text;
+        try (java.io.InputStream in = activity.getAssets().open("THIRD_PARTY_NOTICES.txt")) {
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = in.read(buffer)) > 0) out.write(buffer, 0, read);
+            text = new String(out.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (java.io.IOException e) {
+            text = String.valueOf(e);
+        }
+        new MaterialAlertDialogBuilder(activity)
+                .setTitle(R.string.blockcomet_about_licenses)
+                .setMessage(text)
+                .setPositiveButton(android.R.string.ok, null)
+                .show();
     }
 }
 """
@@ -482,6 +507,11 @@ for rel, old, new in (
     open(f, "w", encoding="utf-8").write(t.replace(old, new, 1))
 print("about page added")
 PY
+
+# 8b. Where the source code lives (shown in the About page and in the notices)
+SOURCE_URL="${BLOCKCOMET_SOURCE_URL:-https://github.com/justaguyLV/effectcraft}"
+sed -i "s|@SOURCE_URL@|$SOURCE_URL|g" "$RES/values/blockcomet_about.xml" "$RES/values-ar/blockcomet_about.xml"
+python3 "$HERE/gen_notices.py" "$P/app_mojo/src/main/assets" "$HERE" "$SOURCE_URL" ${BLOCKCOMET_NOTICES_OUT:+"$BLOCKCOMET_NOTICES_OUT"}
 
 # 9. More customisation: surface/background style, corner roundness and font, each independent of the accent colour
 python3 "$HERE/look.py" "$RES" "$JAVA"

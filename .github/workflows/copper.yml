@@ -8,7 +8,8 @@ name: BlockComet on Copper
 
 on:
   push:
-    branches: [copper-custom]
+    branches: [copper-custom, main]
+    tags: ['v*']
     paths-ignore:
       - '**.md'
       - 'docs/**'
@@ -95,7 +96,11 @@ jobs:
         run: bash copper-custom/run-logged.sh "Fonts" bash copper-custom/fetch-fonts.sh copper/app_mojo/src/main/res/font
 
       - name: Apply BlockComet changes
+        env:
+          BLOCKCOMET_SOURCE_URL: https://github.com/${{ github.repository }}
+          BLOCKCOMET_NOTICES_OUT: ${{ github.workspace }}/out/THIRD_PARTY_NOTICES.txt
         run: |
+          mkdir -p out
           pip install pillow materialyoucolor
           bash copper-custom/run-logged.sh "apply.sh" bash copper-custom/apply.sh copper
 
@@ -136,11 +141,18 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -eu
-          gh release delete copper-latest --yes --cleanup-tag || true
-          gh release create copper-latest out/BlockComet.apk --prerelease --target "$GITHUB_SHA" \
-            --title "BlockComet on Copper (latest build)" \
-            --notes "Copper ${COPPER_SHA::7} + Fabric 1.20.1 + Fabric API + Meteor Client 0.5.4. Signing: $SIGNING"
-          echo "https://github.com/$GITHUB_REPOSITORY/releases/download/copper-latest/BlockComet.apk"
+          NOTES="Built from Copper ${COPPER_SHA::7} with Fabric/Meteor instances. Signing: $SIGNING. Source and recipe: https://github.com/$GITHUB_REPOSITORY (commit ${GITHUB_SHA::7}). See THIRD_PARTY_NOTICES.txt for the licenses."
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            gh release delete "$GITHUB_REF_NAME" --yes || true
+            gh release create "$GITHUB_REF_NAME" out/BlockComet.apk out/THIRD_PARTY_NOTICES.txt \
+              --title "BlockComet Launcher $GITHUB_REF_NAME" --notes "$NOTES"
+            echo "https://github.com/$GITHUB_REPOSITORY/releases/latest/download/BlockComet.apk"
+          else
+            gh release delete copper-latest --yes --cleanup-tag || true
+            gh release create copper-latest out/BlockComet.apk out/THIRD_PARTY_NOTICES.txt --prerelease --target "$GITHUB_SHA" \
+              --title "BlockComet Launcher (latest build)" --notes "$NOTES"
+            echo "https://github.com/$GITHUB_REPOSITORY/releases/download/copper-latest/BlockComet.apk"
+          fi
 
   emulator:
     needs: build

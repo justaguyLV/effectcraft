@@ -1,0 +1,43 @@
+BlockComet Launcher - third-party notices
+==========================================
+
+BlockComet Launcher is free software released under the GNU Lesser General Public License, version 3 (LGPL-3.0).
+Its complete source code, including the recipe that turns the upstream code into this app, is at:
+
+  @SOURCE_URL@
+
+You can rebuild the app from that source, and replace any part of it, as the licenses below allow.
+
+Minecraft is a trademark of Mojang AB / Microsoft. BlockComet Launcher is not affiliated with, endorsed by or sponsored
+by Mojang or Microsoft. The game is not included in this app: it is downloaded from Mojang's servers and needs a
+Minecraft: Java Edition account that owns the game.
+
+
+Launcher code
+-------------
+* Copper Launcher (LGPL-3.0) - https://github.com/CopperLauncher/Copper-Android
+* MojoLauncher (derived from Amethyst / PojavLauncher) and PojavLauncher (LGPL-3.0) -
+  https://github.com/PojavLauncherTeam/PojavLauncher
+  The BlockComet changes (theme, Color Studio, fonts, share-my-look, hotbar fix, bundled instances, translations)
+  are applied to the Copper code by the scripts in the "copper-custom" folder of the source repository.
+  See the upstream repositories for the full list of their contributors and the licenses of the libraries they use.
+
+
+Bundled with the app
+--------------------
+* Meteor Client (GPL-3.0) - https://github.com/MeteorDevelopment/meteor-client
+  A utility ("hacked") client. Many multiplayer servers forbid it: use it only where it is allowed.
+  The jar is unmodified; its source is at the address above.
+* Fabric Loader and Fabric API (Apache-2.0) - https://fabricmc.net
+* Performance mods, each under its own license (see the list below).
+* Fonts: Poppins, Tajawal, Almarai, IBM Plex Sans Arabic, Cairo, Amiri, Noto Kufi Arabic, Lato, Montserrat, Nunito,
+  Quicksand, Rubik, Oswald, Orbitron, Roboto Mono, Press Start 2P, VT323, Silkscreen, Pacifico and Bebas Neue are
+  distributed under the SIL Open Font License 1.1; Ubuntu under the Ubuntu Font Licence 1.0.
+  Source: https://github.com/google/fonts
+
+
+Mods included in this build (read from the files)
+-------------------------------------------------
+@MODS@
+
+Full license texts: the LGPL-3.0 and GPL-3.0 are in the LICENSE and COPYING files of the source repository.
