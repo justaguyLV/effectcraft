@@ -9,4 +9,5 @@
   Share my look (export/import), 46 selectable languages.
 * Full Arabic interface: right-to-left layout, Tajawal font, 273 additional Arabic strings.
 * Hotbar touch area matched to the real hotbar, with a diagnostic overlay; a tap on the slot touched last time is no longer
-  ignored when the game changed the selected slot by itself.
+  ignored when the game changed the selected slot by itself. The in-game screen is always laid out left-to-right: in an
+  Arabic (right-to-left) interface the hotbar touch area used to end up at the right edge of the screen.
