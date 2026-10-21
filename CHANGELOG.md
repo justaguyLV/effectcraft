@@ -8,4 +8,5 @@
 * Color Studio (exact colors), background/surface styles, corner roundness, 20 preset fonts, import of any font file,
   Share my look (export/import), 46 selectable languages.
 * Full Arabic interface: right-to-left layout, Tajawal font, 273 additional Arabic strings.
-* Hotbar touch area matched to the real hotbar, with a diagnostic overlay.
+* Hotbar touch area matched to the real hotbar, with a diagnostic overlay; a tap on the slot touched last time is no longer
+  ignored when the game changed the selected slot by itself.

@@ -4,6 +4,8 @@
 Hotbar touch fixes (taps on the hotbar not selecting a slot):
   * the touch area now has the size of the real hotbar texture (182 x 22 GUI pixels, plus 2 px of slack above the frame)
     and slots are mapped with the real offsets, instead of an approximate 180 x 20 area;
+  * every new touch selects its slot (a tap on the slot touched last time used to be ignored when the game had changed
+    the selected slot by itself),
   * the GUI scale is read again every time the area is positioned, so a stale value can no longer shrink it;
   * a diagnostic option draws the touch area (red box with slot lines) over the game, to see where it really is.
 """
@@ -48,6 +50,31 @@ swap("        int hotbarIndex = (int)MathUtils.map(x, 0, mWidth, 0, HOTBAR_KEYS.
         int hotbarIndex = (int) ((x - mcScale(1)) / mcScale(20));
         if (hotbarIndex < 0) hotbarIndex = 0;
         if (hotbarIndex >= HOTBAR_KEYS.length) hotbarIndex = HOTBAR_KEYS.length - 1;
+""")
+# Every new touch selects its slot. The old code remembered the slot of the previous touch and ignored a tap on that same
+# slot, so after the game changed the selected slot by itself (server, key, scroll wheel) tapping it again did nothing.
+swap("    private int mLastIndex = -1;\n",
+     "    private int mLastIndex = -1;\n    private int mPreviousTouchIndex = -1;\n")
+swap("""        // Check if the slot changed and we need to make a key press
+        if(hotbarIndex == mLastIndex) {
+            // Only check for doubletapping if the slot has not changed
+            if(hasDoubleTapped && !LauncherPreferences.PREF_DISABLE_SWAP_HAND) CallbackBridge.sendKeyPress(KeyEvent.KEYCODE_F);
+            return true;
+        }
+        mLastIndex = hotbarIndex;
+""", """        // A new touch always selects its slot (the game's selected slot can change without us knowing)
+        boolean newTouch = actionMasked == MotionEvent.ACTION_DOWN;
+        if(newTouch) mLastIndex = -1;
+        // Same slot while the finger moves inside it: nothing to send
+        if(hotbarIndex == mLastIndex) return true;
+        // Double tap on the same slot swaps the hands
+        if(newTouch && hasDoubleTapped && hotbarIndex == mPreviousTouchIndex && !LauncherPreferences.PREF_DISABLE_SWAP_HAND) {
+            CallbackBridge.sendKeyPress(KeyEvent.KEYCODE_F);
+            mLastIndex = hotbarIndex;
+            return true;
+        }
+        mLastIndex = hotbarIndex;
+        mPreviousTouchIndex = hotbarIndex;
 """)
 swap("""    private boolean isLastEventInGesture(int actionMasked) {""", """    @Override
     protected void onDraw(Canvas canvas) {
