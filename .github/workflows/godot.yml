@@ -1,0 +1,84 @@
+name: BlockComet Engine (Godot build)
+
+# Builds the editor of a customised Godot (MIT) on GitHub Actions and takes screenshots of it in a virtual screen.
+# The repository holds only the recipe (godot-custom/): Godot itself is downloaded at a pinned tag.
+
+on:
+  push:
+    branches: [godot-custom]
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: godot-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_TAG: 4.7.2-stable
+  SCONS_CACHE: ${{ github.workspace }}/.scons_cache
+  SCONS_CACHE_LIMIT: "3000"
+
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch Godot (pinned tag)
+        run: |
+          set -eux
+          git clone --depth 1 --branch "$GODOT_TAG" https://github.com/godotengine/godot.git godot
+          git -C godot log -1 --format='%h %s'
+
+      - name: Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libx11-dev libxcursor-dev libxinerama-dev libgl1-mesa-dev \
+            libglu1-mesa-dev libasound2-dev libpulse-dev libudev-dev libxi-dev libxrandr-dev libfontconfig-dev \
+            xvfb imagemagick libgl1-mesa-dri
+          pip install scons
+
+      - uses: actions/cache@v4
+        with:
+          path: .scons_cache
+          key: scons-linux-${{ github.sha }}
+          restore-keys: scons-linux-
+
+      - name: Apply the BlockComet changes
+        run: bash godot-custom/run-logged.sh "apply.py" python3 godot-custom/apply.py godot
+
+      - name: Build the editor
+        working-directory: godot
+        run: |
+          bash ../godot-custom/run-logged.sh "scons editor" scons platform=linuxbsd target=editor arch=x86_64 \
+            scu_build=yes lto=none debug_symbols=no tests=no dev_mode=no wayland=no speechd=no dbus=no -j"$(nproc)"
+          ls -l bin
+
+      - name: Screenshots in a virtual screen
+        run: bash godot-custom/screenshot.sh godot/bin/godot.linuxbsd.editor.x86_64 godot-custom/demo shots
+
+      - name: Package
+        run: |
+          mkdir -p out
+          cp godot/bin/godot.linuxbsd.editor.x86_64 out/BlockCometEngine.linux.x86_64
+          chmod +x out/BlockCometEngine.linux.x86_64
+          (cd out && zip -q BlockCometEngine-linux-x86_64.zip BlockCometEngine.linux.x86_64 && rm BlockCometEngine.linux.x86_64)
+          ls -l out shots
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -u
+          gh release delete godot-test --yes --cleanup-tag || true
+          gh release create godot-test shots/*.png shots/*.log --prerelease --target "$GITHUB_SHA" \
+            --title "BlockComet Engine: editor screenshots" --notes "Screenshots of the editor in a virtual screen (software OpenGL)."
+          gh release delete godot-latest --yes --cleanup-tag || true
+          gh release create godot-latest out/BlockCometEngine-linux-x86_64.zip --prerelease --target "$GITHUB_SHA" \
+            --title "BlockComet Engine (latest build, Linux)" --notes "Godot $GODOT_TAG with the BlockComet look and layout."
