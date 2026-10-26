@@ -6,8 +6,6 @@ name: BlockComet Engine (Godot build)
 on:
   push:
     branches: [godot-custom]
-    paths-ignore:
-      - '**.md'
   workflow_dispatch:
 
 permissions:
